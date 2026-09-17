@@ -29,8 +29,8 @@ class FakeOscillator {
   onended: (() => void) | null = null;
   connect = vi.fn();
   disconnect = vi.fn();
-  start = vi.fn();
-  stop = vi.fn(() => {
+  start = vi.fn((_when?: number) => {});
+  stop = vi.fn((_when?: number) => {
     this.onended?.();
   });
 }
