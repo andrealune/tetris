@@ -101,6 +101,30 @@ describe('rotation shapes', () => {
     expectSameShape(rotateCW(def.rotations[3]), def.rotations[0]);
   });
 
+  it('gives S the canonical S shape (top row right-shifted, bottom row left-shifted)', () => {
+    // . X X
+    // X X .
+    const s = getDefinition('S').rotations[0];
+    expectSameShape(s, [
+      { x: 0, y: -1 },
+      { x: 1, y: -1 },
+      { x: -1, y: 0 },
+      { x: 0, y: 0 },
+    ]);
+  });
+
+  it('gives Z the canonical Z shape (top row left-shifted, bottom row right-shifted)', () => {
+    // X X .
+    // . X X
+    const z = getDefinition('Z').rotations[0];
+    expectSameShape(z, [
+      { x: -1, y: -1 },
+      { x: 0, y: -1 },
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+  });
+
   it('produces mirrored S and Z spawn shapes', () => {
     const s = getDefinition('S').rotations[0];
     const z = getDefinition('Z').rotations[0];

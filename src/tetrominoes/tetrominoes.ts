@@ -55,20 +55,31 @@ const T_SPAWN: RotationState = [
   point(0, -1),
 ];
 
-/** S: classic "S" shape. Pivot is the lower-left cell of the shape. */
+/**
+ * S: classic "S" shape -- top row shifted right, bottom row shifted left:
+ *   . X X
+ *   X X .
+ * Pivot is the lower-right cell of the bottom-left pair.
+ */
 const S_SPAWN: RotationState = [
-  point(-1, -1),
-  point(0, -1),
-  point(0, 0),
-  point(1, 0),
-];
-
-/** Z: classic "Z" shape (mirror of S). Pivot is the lower-right-ish cell. */
-const Z_SPAWN: RotationState = [
   point(0, -1),
   point(1, -1),
   point(-1, 0),
   point(0, 0),
+];
+
+/**
+ * Z: classic "Z" shape (mirror of S) -- top row shifted left, bottom row
+ * shifted right:
+ *   X X .
+ *   . X X
+ * Pivot is the lower-left cell of the bottom-right pair.
+ */
+const Z_SPAWN: RotationState = [
+  point(-1, -1),
+  point(0, -1),
+  point(0, 0),
+  point(1, 0),
 ];
 
 /** J: corner up-left, foot along the bottom row. */
