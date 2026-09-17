@@ -3,10 +3,12 @@
  *
  * Every effect is synthesized in the browser with `OscillatorNode`s (sine /
  * square waves) so no audio files need to be bundled or fetched. Effects are
- * intentionally short (roughly 100-300ms) to feel snappy and "arcade" like,
- * and everything is routed through a single master `GainNode` so volume can
- * be controlled (and later muted, see the mute-toggle follow-up ticket)
- * without touching individual sounds.
+ * kept short - every effect's total duration (from the first tone's start to
+ * the last tone's end) is within 100-300ms, enforced by
+ * `getEffectDuration()` below and asserted in the test suite - and
+ * everything is routed through a single master `GainNode` so volume can be
+ * controlled (and later muted, see the mute-toggle follow-up ticket) without
+ * touching individual sounds.
  *
  * The engine is framework agnostic (no React dependency) so it can be
  * dropped into any part of the game (reducer, event handlers, etc). A tiny
@@ -43,55 +45,75 @@ interface Tone {
 const DEFAULT_VOLUME = 0.5;
 const MIN_RAMP_FREQUENCY = 1; // exponentialRamp can't target 0.
 
+/** Required effect-duration bounds, in milliseconds, per the task spec. */
+export const MIN_EFFECT_DURATION_MS = 100;
+export const MAX_EFFECT_DURATION_MS = 300;
+
 /**
  * Declarative "recipes" for each effect: a short list of oscillator notes
  * scheduled relative to when the effect is triggered. Keeping these as data
  * makes it easy to see/tune every sound's duration and character at a
- * glance.
+ * glance. Every effect's total span (see `getEffectDuration`) is kept within
+ * 100-300ms.
  */
 const EFFECTS: Record<SoundEffect, Tone[]> = {
-  // Quick, subtle tick when a piece is nudged left/right.
-  move: [{ frequency: 220, start: 0, duration: 0.05, type: 'square', gain: 0.22 }],
+  // Quick, subtle tick when a piece is nudged left/right. 110ms total.
+  move: [{ frequency: 220, start: 0, duration: 0.11, type: 'square', gain: 0.25 }],
 
-  // Short upward blip for rotation.
-  rotate: [{ frequency: 440, start: 0, duration: 0.08, type: 'square', gain: 0.3, glideTo: 660 }],
+  // Short upward blip for rotation. 120ms total.
+  rotate: [{ frequency: 440, start: 0, duration: 0.12, type: 'square', gain: 0.3, glideTo: 660 }],
 
-  // Soft, low click for each soft-drop step.
-  softDrop: [{ frequency: 150, start: 0, duration: 0.06, type: 'square', gain: 0.2 }],
+  // Soft, low click for each soft-drop step. 110ms total.
+  softDrop: [{ frequency: 150, start: 0, duration: 0.11, type: 'square', gain: 0.22 }],
 
-  // Punchy descending thump for hard drop (two layered tones).
+  // Punchy descending thump for hard drop (two layered tones). 150ms total.
   hardDrop: [
     { frequency: 300, start: 0, duration: 0.15, type: 'sine', gain: 0.5, glideTo: 80 },
     { frequency: 90, start: 0, duration: 0.12, type: 'square', gain: 0.25 },
   ],
 
-  // Piece placement / lock - a short mid tone "thud".
+  // Piece placement / lock - a short mid tone "thud". 120ms total.
   lock: [{ frequency: 200, start: 0, duration: 0.12, type: 'square', gain: 0.35, glideTo: 140 }],
 
-  // Line clear - quick ascending arpeggio (C5-E5-G5-C6).
+  // Line clear - quick ascending arpeggio (C5-E5-G5-C6). 280ms total.
   lineClear: [
-    { frequency: 523.25, start: 0, duration: 0.09, type: 'sine', gain: 0.4 },
-    { frequency: 659.25, start: 0.07, duration: 0.09, type: 'sine', gain: 0.4 },
-    { frequency: 783.99, start: 0.14, duration: 0.1, type: 'sine', gain: 0.45 },
-    { frequency: 1046.5, start: 0.21, duration: 0.09, type: 'square', gain: 0.35 },
+    { frequency: 523.25, start: 0, duration: 0.07, type: 'sine', gain: 0.4 },
+    { frequency: 659.25, start: 0.06, duration: 0.07, type: 'sine', gain: 0.4 },
+    { frequency: 783.99, start: 0.12, duration: 0.07, type: 'sine', gain: 0.45 },
+    { frequency: 1046.5, start: 0.18, duration: 0.1, type: 'square', gain: 0.35 },
   ],
 
-  // Level up - triumphant rising fanfare (G4-C5-E5-G5).
+  // Level up - triumphant rising fanfare (G4-C5-E5-G5). 290ms total.
   levelUp: [
-    { frequency: 392.0, start: 0, duration: 0.09, type: 'sine', gain: 0.4 },
-    { frequency: 523.25, start: 0.08, duration: 0.09, type: 'sine', gain: 0.42 },
-    { frequency: 659.25, start: 0.16, duration: 0.11, type: 'sine', gain: 0.45 },
-    { frequency: 783.99, start: 0.24, duration: 0.16, type: 'square', gain: 0.4 },
+    { frequency: 392.0, start: 0, duration: 0.07, type: 'sine', gain: 0.4 },
+    { frequency: 523.25, start: 0.065, duration: 0.07, type: 'sine', gain: 0.42 },
+    { frequency: 659.25, start: 0.13, duration: 0.075, type: 'sine', gain: 0.45 },
+    { frequency: 783.99, start: 0.195, duration: 0.095, type: 'square', gain: 0.4 },
   ],
 
-  // Game over - descending, ominous square-wave sequence.
+  // Game over - descending, ominous square-wave sequence. 290ms total.
   gameOver: [
-    { frequency: 392.0, start: 0, duration: 0.1, type: 'square', gain: 0.4 },
-    { frequency: 329.63, start: 0.09, duration: 0.1, type: 'square', gain: 0.4 },
-    { frequency: 261.63, start: 0.18, duration: 0.12, type: 'square', gain: 0.4 },
-    { frequency: 196.0, start: 0.28, duration: 0.2, type: 'square', gain: 0.45 },
+    { frequency: 392.0, start: 0, duration: 0.07, type: 'square', gain: 0.4 },
+    { frequency: 329.63, start: 0.065, duration: 0.07, type: 'square', gain: 0.4 },
+    { frequency: 261.63, start: 0.13, duration: 0.075, type: 'square', gain: 0.42 },
+    { frequency: 196.0, start: 0.195, duration: 0.095, type: 'square', gain: 0.45 },
   ],
 };
+
+/**
+ * Total duration of an effect, in seconds, measured from the start of its
+ * first tone to the end of its last tone. Used to enforce (and test) the
+ * 100-300ms requirement for every effect.
+ */
+export function getEffectDurationSeconds(effect: SoundEffect): number {
+  const tones = EFFECTS[effect];
+  return tones.reduce((max, tone) => Math.max(max, tone.start + tone.duration), 0);
+}
+
+/** Same as `getEffectDurationSeconds`, expressed in milliseconds. */
+export function getEffectDurationMs(effect: SoundEffect): number {
+  return getEffectDurationSeconds(effect) * 1000;
+}
 
 /**
  * Synthesizes short arcade-style sound effects with the Web Audio API and

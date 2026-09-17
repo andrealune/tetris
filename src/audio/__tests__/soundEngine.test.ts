@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SoundEngine, type SoundEffect } from '../soundEngine';
+import {
+  SoundEngine,
+  getEffectDurationMs,
+  MIN_EFFECT_DURATION_MS,
+  MAX_EFFECT_DURATION_MS,
+  type SoundEffect,
+} from '../soundEngine';
 
 class FakeParam {
   value = 0;
@@ -60,6 +66,19 @@ const ALL_EFFECTS: SoundEffect[] = [
   'gameOver',
 ];
 
+describe('effect durations (100-300ms requirement)', () => {
+  it('defines the required bounds as 100ms and 300ms', () => {
+    expect(MIN_EFFECT_DURATION_MS).toBe(100);
+    expect(MAX_EFFECT_DURATION_MS).toBe(300);
+  });
+
+  it.each(ALL_EFFECTS)('keeps the "%s" effect between 100ms and 300ms', (effect) => {
+    const durationMs = getEffectDurationMs(effect);
+    expect(durationMs).toBeGreaterThanOrEqual(MIN_EFFECT_DURATION_MS);
+    expect(durationMs).toBeLessThanOrEqual(MAX_EFFECT_DURATION_MS);
+  });
+});
+
 describe('SoundEngine', () => {
   let ctx: FakeAudioContext;
   let engine: SoundEngine;
@@ -90,6 +109,21 @@ describe('SoundEngine', () => {
     const osc = ctx.createOscillator.mock.results[0]!.value as FakeOscillator;
     expect(osc.start).toHaveBeenCalledTimes(1);
     expect(osc.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops every oscillator no later than the effect duration (+ a small release tail)', () => {
+    for (const effect of ALL_EFFECTS) {
+      ctx.createOscillator.mockClear();
+      engine.play(effect);
+
+      const durationMs = getEffectDurationMs(effect);
+      for (const result of ctx.createOscillator.mock.results) {
+        const osc = result.value as FakeOscillator;
+        const stopAtSeconds = osc.stop.mock.calls[0]![0] as number;
+        // scheduleTone stops at endTime + 0.02s; allow that small release tail.
+        expect(stopAtSeconds * 1000).toBeLessThanOrEqual(durationMs + 20 + 1e-6);
+      }
+    }
   });
 
   it('uses sine and/or square oscillators for an arcade feel', () => {
